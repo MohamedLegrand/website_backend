@@ -78,3 +78,14 @@ def supprimer_notification(db: Session, notification_id: UUID, utilisateur_id: U
     db.delete(notification)
     db.commit()
     return {"message": "Notification supprimée avec succès"}
+
+def supprimer_toutes_notifications(db: Session, utilisateur_id: UUID) -> dict:
+    notifications = db.execute(
+        select(Notification).where(Notification.utilisateur_id == utilisateur_id)
+    ).scalars().all()
+
+    count = len(notifications)
+    for n in notifications:
+        db.delete(n)
+    db.commit()
+    return {"message": f"{count} notification(s) supprimée(s)"}

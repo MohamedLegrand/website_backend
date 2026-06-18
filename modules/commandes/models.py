@@ -7,31 +7,18 @@ from app.database.base import Base
 class Commande(Base):
     __tablename__ = "commandes"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True,
-        default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     utilisateur_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("utilisateurs.id", ondelete="RESTRICT"),
-        nullable=False
+        ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False
     )
-    statut: Mapped[str] = mapped_column(
-        String(20),
-        default="en_attente"
-    )
-    montant_total: Mapped[float] = mapped_column(
-        Numeric(10, 2),
-        nullable=False
-    )
+    statut: Mapped[str] = mapped_column(String(20), default="en_attente")
+    montant_total: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     devise: Mapped[str] = mapped_column(String(10), default="EUR")
     cree_le: Mapped[DateTime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now()
+        DateTime(timezone=True), server_default=func.now()
     )
     modifie_le: Mapped[DateTime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     # Relations
@@ -51,22 +38,14 @@ class Commande(Base):
 class LigneCommande(Base):
     __tablename__ = "lignes_commandes"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True,
-        default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     commande_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("commandes.id", ondelete="CASCADE"),
-        nullable=False
+        ForeignKey("commandes.id", ondelete="CASCADE"), nullable=False
     )
     livre_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("livres.id", ondelete="RESTRICT"),
-        nullable=False
+        ForeignKey("livres.id", ondelete="RESTRICT"), nullable=False
     )
-    prix_unitaire: Mapped[float] = mapped_column(
-        Numeric(10, 2),
-        nullable=False
-    )
+    prix_unitaire: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     quantite: Mapped[int] = mapped_column(Integer, default=1)
 
     # Relations

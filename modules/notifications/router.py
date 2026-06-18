@@ -9,32 +9,44 @@ from modules.notifications import service
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
+
 @router.get("/", response_model=NotificationListResponse)
 def mes_notifications(
     db: Session = Depends(get_db),
-    current_user: Utilisateur = Depends(get_current_user)
+    current_user: Utilisateur = Depends(get_current_user),
 ):
     return service.obtenir_mes_notifications(db, current_user.id)
+
+
+@router.patch("/lire-tout", status_code=status.HTTP_200_OK)
+def marquer_tout_comme_lu(
+    db: Session = Depends(get_db),
+    current_user: Utilisateur = Depends(get_current_user),
+):
+    return service.marquer_tout_comme_lu(db, current_user.id)
+
 
 @router.patch("/{notification_id}/lire", response_model=NotificationResponse)
 def marquer_comme_lu(
     notification_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Utilisateur = Depends(get_current_user)
+    current_user: Utilisateur = Depends(get_current_user),
 ):
     return service.marquer_comme_lu(db, notification_id, current_user.id)
 
-@router.patch("/lire-tout", status_code=status.HTTP_200_OK)
-def marquer_tout_comme_lu(
+
+@router.delete("/", status_code=status.HTTP_200_OK)
+def supprimer_toutes_notifications(
     db: Session = Depends(get_db),
-    current_user: Utilisateur = Depends(get_current_user)
+    current_user: Utilisateur = Depends(get_current_user),
 ):
-    return service.marquer_tout_comme_lu(db, current_user.id)
+    return service.supprimer_toutes_notifications(db, current_user.id)
+
 
 @router.delete("/{notification_id}", status_code=status.HTTP_200_OK)
 def supprimer_notification(
     notification_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Utilisateur = Depends(get_current_user)
+    current_user: Utilisateur = Depends(get_current_user),
 ):
     return service.supprimer_notification(db, notification_id, current_user.id)
