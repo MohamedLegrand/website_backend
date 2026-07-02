@@ -9,6 +9,8 @@ class LivreBase(BaseModel):
     auteur: str
     description: Optional[str] = None
     couverture_url: Optional[str] = None
+    quatrieme_couverture_url: Optional[str] = None
+    sommaire_urls: Optional[list[str]] = None
     langue: Optional[str] = None
     isbn: Optional[str] = None
     prix: float
@@ -17,14 +19,19 @@ class LivreBase(BaseModel):
 
 # Schéma de création
 class LivreCreate(LivreBase):
-    pass
+    # Optionnel : impose un slug explicite au lieu de le générer depuis le titre
+    # (nécessaire pour faire correspondre les ids statiques du frontend)
+    slug: Optional[str] = None
 
 # Schéma de modification
 class LivreUpdate(BaseModel):
     titre: Optional[str] = None
+    slug: Optional[str] = None
     auteur: Optional[str] = None
     description: Optional[str] = None
     couverture_url: Optional[str] = None
+    quatrieme_couverture_url: Optional[str] = None
+    sommaire_urls: Optional[list[str]] = None
     langue: Optional[str] = None
     isbn: Optional[str] = None
     prix: Optional[float] = None

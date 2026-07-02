@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.database.database import get_db
@@ -11,6 +12,7 @@ from modules.commandes.schemas import (
     CommandeListResponse
 )
 from modules.commandes import service
+from modules.commandes.facture import generer_facture_pdf, numero_facture
 
 router = APIRouter(
     prefix="/commandes",
@@ -42,7 +44,7 @@ def obtenir_commande(
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user)
 ):
-    return service.obtenir_commande(db, id)
+    return service.obtenir_commande_pour_utilisateur(db, id, current_user)
 
 @router.patch("/{id}/annuler", response_model=CommandeResponse)
 def annuler_commande(
@@ -51,6 +53,26 @@ def annuler_commande(
     current_user: Utilisateur = Depends(get_current_user)
 ):
     return service.annuler_commande(db, id, current_user.id)
+
+@router.get("/{id}/facture")
+def telecharger_facture(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Utilisateur = Depends(get_current_user)
+):
+    """Télécharge la facture PDF d'une commande payée (propriétaire ou admin uniquement)"""
+    commande = service.obtenir_commande_pour_utilisateur(db, id, current_user)
+    if commande.statut != "payee":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La facture n'est disponible que pour une commande payée"
+        )
+    pdf = generer_facture_pdf(commande)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{numero_facture(commande)}.pdf"'}
+    )
 
 # ─── Admin ────────────────────────────────────────────────────
 

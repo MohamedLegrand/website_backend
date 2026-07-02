@@ -3,6 +3,7 @@ from sqlalchemy import select
 from uuid import UUID
 from modules.panier.models import Panier, LignePanier
 from modules.livres.models import Livre
+from modules.livres import service as livres_service
 from modules.panier.schemas import AjouterLivreSchema, PanierResponse, LignePanierResponse
 
 
@@ -21,15 +22,13 @@ def ajouter_livre(db: Session, utilisateur_id: UUID, data: AjouterLivreSchema):
     """Ajoute un livre au panier"""
     panier = obtenir_ou_creer_panier(db, utilisateur_id)
 
-    # Vérifier si le livre existe
-    livre = db.query(Livre).filter(Livre.id == data.livre_id).first()
-    if not livre:
-        raise ValueError("Livre non trouvé")
+    # Vérifier si le livre existe (livre_id accepte un UUID ou un slug)
+    livre = livres_service.obtenir_livre(db, data.livre_id)
 
     # Vérifier si le livre est déjà dans le panier
     ligne = db.query(LignePanier).filter(
         LignePanier.panier_id == panier.id,
-        LignePanier.livre_id == data.livre_id
+        LignePanier.livre_id == livre.id
     ).first()
 
     if ligne:
@@ -37,7 +36,7 @@ def ajouter_livre(db: Session, utilisateur_id: UUID, data: AjouterLivreSchema):
     else:
         ligne = LignePanier(
             panier_id=panier.id,
-            livre_id=data.livre_id,
+            livre_id=livre.id,
             quantite=data.quantite
         )
         db.add(ligne)

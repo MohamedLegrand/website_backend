@@ -38,9 +38,10 @@ def livres_par_collection(
 
 @router.get("/{id}", response_model=LivreResponse)
 def obtenir_livre(
-    id: UUID,
+    id: str,
     db: Session = Depends(get_db)
 ):
+    """id accepte soit l'UUID en base, soit le slug (ex: "ange-ou-demon")"""
     return service.obtenir_livre(db, id)
 
 # ─── Admin ────────────────────────────────────────────────────
@@ -49,39 +50,43 @@ def obtenir_livre(
 def creer_livre(
     data: LivreCreate,
     db: Session = Depends(get_db),
-    _: Utilisateur = Depends(get_current_admin)
+    current_admin: Utilisateur = Depends(get_current_admin)
 ):
-    return service.creer_livre(db, data)
+    return service.creer_livre(db, data, current_admin.id)
 
 @router.put("/{id}", response_model=LivreResponse)
 def modifier_livre(
-    id: UUID,
+    id: str,
     data: LivreUpdate,
     db: Session = Depends(get_db),
-    _: Utilisateur = Depends(get_current_admin)
+    current_admin: Utilisateur = Depends(get_current_admin)
 ):
-    return service.modifier_livre(db, id, data)
+    livre = service.obtenir_livre(db, id)
+    return service.modifier_livre(db, livre.id, data, current_admin.id)
 
 @router.patch("/{id}/publier", response_model=LivreResponse)
 def publier_livre(
-    id: UUID,
+    id: str,
     db: Session = Depends(get_db),
     _: Utilisateur = Depends(get_current_admin)
 ):
-    return service.publier_livre(db, id)
+    livre = service.obtenir_livre(db, id)
+    return service.publier_livre(db, livre.id)
 
 @router.patch("/{id}/depublier", response_model=LivreResponse)
 def depublier_livre(
-    id: UUID,
+    id: str,
     db: Session = Depends(get_db),
     _: Utilisateur = Depends(get_current_admin)
 ):
-    return service.depublier_livre(db, id)
+    livre = service.obtenir_livre(db, id)
+    return service.depublier_livre(db, livre.id)
 
 @router.delete("/{id}", status_code=status.HTTP_200_OK)
 def supprimer_livre(
-    id: UUID,
+    id: str,
     db: Session = Depends(get_db),
-    _: Utilisateur = Depends(get_current_admin)
+    current_admin: Utilisateur = Depends(get_current_admin)
 ):
-    return service.supprimer_livre(db, id)
+    livre = service.obtenir_livre(db, id)
+    return service.supprimer_livre(db, livre.id, current_admin.id)

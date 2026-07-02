@@ -4,10 +4,13 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from modules.avis.models import Avis
 from modules.avis.schemas import AvisCreate, AvisUpdate
+from modules.livres import service as livres_service
 
 def creer_avis(db: Session, utilisateur_id: UUID, data: AvisCreate) -> Avis:
+    livre = livres_service.obtenir_livre(db, data.livre_id)
+
     existant = db.execute(
-        select(Avis).where(Avis.utilisateur_id == utilisateur_id, Avis.livre_id == data.livre_id)
+        select(Avis).where(Avis.utilisateur_id == utilisateur_id, Avis.livre_id == livre.id)
     ).scalar_one_or_none()
 
     if existant:
@@ -18,7 +21,7 @@ def creer_avis(db: Session, utilisateur_id: UUID, data: AvisCreate) -> Avis:
 
     avis = Avis(
         utilisateur_id=utilisateur_id,
-        livre_id=data.livre_id,
+        livre_id=livre.id,
         note=data.note,
         commentaire=data.commentaire
     )
@@ -27,14 +30,15 @@ def creer_avis(db: Session, utilisateur_id: UUID, data: AvisCreate) -> Avis:
     db.refresh(avis)
     return avis
 
-def obtenir_avis_livre(db: Session, livre_id: UUID, page: int = 1, taille: int = 10) -> dict:
+def obtenir_avis_livre(db: Session, id_ou_slug, page: int = 1, taille: int = 10) -> dict:
+    livre = livres_service.obtenir_livre(db, id_ou_slug)
     offset = (page - 1) * taille
     total = db.execute(
-        select(func.count(Avis.id)).where(Avis.livre_id == livre_id, Avis.est_approuve == True)
+        select(func.count(Avis.id)).where(Avis.livre_id == livre.id, Avis.est_approuve == True)
     ).scalar()
     avis = db.execute(
         select(Avis).where(
-            Avis.livre_id == livre_id, Avis.est_approuve == True
+            Avis.livre_id == livre.id, Avis.est_approuve == True
         ).offset(offset).limit(taille)
     ).scalars().all()
     return {"total": total, "page": page, "taille": taille, "avis": avis}

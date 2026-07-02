@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, status
+from fastapi import APIRouter, Depends, Request, UploadFile, File, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -43,26 +43,43 @@ def supprimer_fichier(
 
 @router.get("/{livre_id}", response_model=FichierLivreListResponse)
 def liste_fichiers_livre(
-    livre_id: UUID,
+    livre_id: str,
     db: Session = Depends(get_db)
 ):
-    return service.obtenir_fichiers_livre(db, livre_id)
+    """livre_id accepte soit l'UUID en base, soit le slug"""
+    from modules.livres import service as livres_service
+    livre = livres_service.obtenir_livre(db, livre_id)
+    return service.obtenir_fichiers_livre(db, livre.id)
 
 # ─── Utilisateur connecté ─────────────────────────────────────
+
+MEDIA_TYPES = {
+    "pdf": "application/pdf",
+    "epub": "application/epub+zip",
+}
 
 @router.get(
     "/{livre_id}/telecharger/{fichier_id}",
     response_class=FileResponse
 )
 def telecharger_fichier(
-    livre_id: UUID,
+    livre_id: str,
     fichier_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user)
 ):
-    fichier = service.obtenir_fichier(db, fichier_id)
+    """
+    livre_id accepte soit l'UUID en base, soit le slug.
+    Nécessite un accès valide (livre gratuit, acheté, ou compte admin).
+    """
+    livre, fichier = service.telecharger_fichier(
+        db, livre_id, fichier_id, current_user,
+        adresse_ip=request.client.host if request.client else None,
+        appareil=request.headers.get("user-agent"),
+    )
     return FileResponse(
         path=fichier.chemin_fichier,
-        filename=f"livre.{fichier.format}",
-        media_type="application/octet-stream"
+        filename=f"{livre.slug}.{fichier.format}",
+        media_type=MEDIA_TYPES.get(fichier.format, "application/octet-stream")
     )

@@ -3,6 +3,23 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
+class LivreResumeSchema(BaseModel):
+    id: UUID
+    slug: str
+    titre: str
+    auteur: str
+    couverture_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class FichierResumeSchema(BaseModel):
+    id: UUID
+    format: str
+
+    class Config:
+        from_attributes = True
+
 class AccesLivreResponse(BaseModel):
     id: UUID
     utilisateur_id: UUID
@@ -10,6 +27,8 @@ class AccesLivreResponse(BaseModel):
     commande_id: UUID
     accorde_le: datetime
     expire_le: Optional[datetime] = None
+    livre: Optional[LivreResumeSchema] = None
+    fichiers_disponibles: list[FichierResumeSchema] = []
 
     class Config:
         from_attributes = True

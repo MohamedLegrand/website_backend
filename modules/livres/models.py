@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import String, Text, Boolean, ForeignKey, Numeric, DateTime
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.database.base import Base
@@ -16,6 +17,8 @@ class Livre(Base):
     auteur: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     couverture_url: Mapped[str | None] = mapped_column(String(500))
+    quatrieme_couverture_url: Mapped[str | None] = mapped_column(String(500))
+    sommaire_urls: Mapped[list[str] | None] = mapped_column(ARRAY(String(500)))
     langue: Mapped[str | None] = mapped_column(String(50))
     isbn: Mapped[str | None] = mapped_column(String(20), unique=True)
     prix: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)

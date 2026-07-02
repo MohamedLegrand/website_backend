@@ -18,6 +18,15 @@ def mes_notifications(
     return service.obtenir_mes_notifications(db, current_user.id)
 
 
+@router.get("/{notification_id}", response_model=NotificationResponse)
+def detail_notification(
+    notification_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Utilisateur = Depends(get_current_user),
+):
+    return service.obtenir_notification(db, notification_id, current_user.id)
+
+
 @router.patch("/lire-tout", status_code=status.HTTP_200_OK)
 def marquer_tout_comme_lu(
     db: Session = Depends(get_db),

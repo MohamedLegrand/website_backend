@@ -19,11 +19,12 @@ def creer_avis(
 
 @router.get("/livre/{livre_id}", response_model=AvisListResponse)
 def avis_livre(
-    livre_id: UUID,
+    livre_id: str,
     page: int = 1,
     taille: int = 10,
     db: Session = Depends(get_db)
 ):
+    """livre_id accepte soit l'UUID en base, soit le slug"""
     return service.obtenir_avis_livre(db, livre_id, page, taille)
 
 @router.get("/", response_model=AvisListResponse)

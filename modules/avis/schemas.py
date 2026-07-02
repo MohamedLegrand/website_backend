@@ -4,7 +4,7 @@ from uuid import UUID
 from datetime import datetime
 
 class AvisCreate(BaseModel):
-    livre_id: UUID
+    livre_id: str  # UUID ou slug (ex: "ange-ou-demon")
     note: int = Field(..., ge=1, le=5)
     commentaire: Optional[str] = None
 

@@ -20,10 +20,11 @@ def mes_acces(
 
 @router.get("/verifier/{livre_id}")
 def verifier_acces(
-    livre_id: UUID,
+    livre_id: str,
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user)
 ):
+    """livre_id accepte soit l'UUID en base, soit le slug"""
     acces = service.verifier_acces(db, current_user.id, livre_id)
     return {"a_acces": acces}
 

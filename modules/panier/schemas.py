@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 
 class AjouterLivreSchema(BaseModel):
-    livre_id: UUID
+    livre_id: str  # UUID ou slug (ex: "ange-ou-demon")
     quantite: int = 1
 
 class LignePanierResponse(BaseModel):

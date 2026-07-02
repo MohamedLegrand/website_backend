@@ -5,6 +5,18 @@ from fastapi import HTTPException, status
 from modules.notifications.models import Notification
 from modules.notifications.schemas import NotificationCreate
 
+def obtenir_notification(db: Session, notification_id: UUID, utilisateur_id: UUID) -> Notification:
+    notification = db.execute(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.utilisateur_id == utilisateur_id
+        )
+    ).scalar_one_or_none()
+
+    if not notification:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification non trouvée")
+    return notification
+
 def creer_notification(db: Session, data: NotificationCreate) -> Notification:
     notification = Notification(
         utilisateur_id=data.utilisateur_id,

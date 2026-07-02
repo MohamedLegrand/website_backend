@@ -5,7 +5,7 @@ from datetime import datetime
 
 # Ligne de commande
 class LigneCommandeCreate(BaseModel):
-    livre_id: UUID
+    livre_id: str  # UUID ou slug (ex: "ange-ou-demon")
     quantite: int = 1
 
 class LigneCommandeResponse(BaseModel):

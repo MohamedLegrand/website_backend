@@ -3,7 +3,7 @@ from sqlalchemy import select, func
 from uuid import UUID
 from fastapi import HTTPException, status
 from modules.commandes.models import Commande, LigneCommande
-from modules.livres.models import Livre
+from modules.livres import service as livres_service
 from modules.commandes.schemas import CommandeCreate, CommandeUpdateStatut
 from modules.notifications.notifier import notifier
 
@@ -21,15 +21,7 @@ def creer_commande(db: Session, utilisateur_id: UUID, data: CommandeCreate) -> C
     lignes = []
 
     for ligne in data.lignes:
-        livre = db.execute(
-            select(Livre).where(Livre.id == ligne.livre_id)
-        ).scalar_one_or_none()
-
-        if not livre:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Livre {ligne.livre_id} non trouvé"
-            )
+        livre = livres_service.obtenir_livre(db, ligne.livre_id)
 
         if not livre.est_publie:
             raise HTTPException(
@@ -41,7 +33,7 @@ def creer_commande(db: Session, utilisateur_id: UUID, data: CommandeCreate) -> C
         montant_total += prix * ligne.quantite
 
         lignes.append(LigneCommande(
-            livre_id=ligne.livre_id,
+            livre_id=livre.id,
             prix_unitaire=prix,
             quantite=ligne.quantite
         ))
@@ -163,6 +155,18 @@ def obtenir_commande(db: Session, commande_id: UUID) -> Commande:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Commande non trouvée"
+        )
+    return commande
+
+
+def obtenir_commande_pour_utilisateur(db: Session, commande_id: UUID, utilisateur) -> Commande:
+    """Comme obtenir_commande, mais restreint l'accès au propriétaire ou à un admin"""
+    from modules.utilisateurs.models import RoleEnum
+    commande = obtenir_commande(db, commande_id)
+    if commande.utilisateur_id != utilisateur.id and utilisateur.role != RoleEnum.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vous n'avez pas accès à cette commande"
         )
     return commande
 
