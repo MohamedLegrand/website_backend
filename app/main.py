@@ -30,9 +30,17 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",     # Vite (développement)
+        "http://localhost:5173",     # Vite (développement par défaut)
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",     # Port actuellement utilisé par le frontend
+        "http://localhost:5177",
         "http://localhost:3000",     # React (alternative)
         "http://127.0.0.1:5173",     # Localhost alternative
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175",
+        "http://127.0.0.1:5176",
+        "http://127.0.0.1:5177",
         "http://127.0.0.1:3000",
     ],
     allow_credentials=True,

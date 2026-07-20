@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE_MB: int = 50
 
+    # Facturation (en-tête / pied de page du PDF de facture)
+    FACTURE_ENTREPRISE_NOM: str = "Sagesse Africaine"
+    FACTURE_ENTREPRISE_SLOGAN: str = "Un peuple qui maîtrise ses savoirs maîtrise aussi son destin"
+    FACTURE_ENTREPRISE_ADRESSE: str = ""
+    FACTURE_ENTREPRISE_TELEPHONE: str = ""
+    FACTURE_ENTREPRISE_EMAIL: str = ""
+    FACTURE_ENTREPRISE_SITE_WEB: str = ""
+    FACTURE_LOGO_PATH: str = "app/static/images/logo.png"
+
     # Mail
     MAIL_USERNAME: str
     MAIL_PASSWORD: str
