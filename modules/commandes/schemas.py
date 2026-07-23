@@ -20,7 +20,7 @@ class LigneCommandeResponse(BaseModel):
 # Commande
 class CommandeCreate(BaseModel):
     lignes: list[LigneCommandeCreate]
-    devise: str = "EUR"
+    devise: str = "XAF"
 
 class CommandeUpdateStatut(BaseModel):
     statut: str

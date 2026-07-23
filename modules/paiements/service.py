@@ -1,12 +1,17 @@
+import hrpay
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from uuid import UUID
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
+from app.core.config import settings
 from modules.paiements.models import Paiement
 from modules.commandes.models import Commande
-from modules.paiements.schemas import PaiementCreate, PaiementConfirmer
+from modules.paiements.schemas import PaiementCreate
+from modules.paiements.hrpay_client import get_client, devise_pour_pays
 from modules.notifications.notifier import notifier
+
+OPERATEURS_AUTORISES = {"ORANGE", "MTN"}
 
 
 def obtenir_paiement_par_commande(db: Session, commande_id: UUID) -> Paiement:
@@ -19,6 +24,33 @@ def obtenir_paiement_par_commande(db: Session, commande_id: UUID) -> Paiement:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Paiement non trouvé pour cette commande"
         )
+
+    # Synchronisation active en cas de polling : si le statut local est "en_attente",
+    # on interroge l'API HR-Skills Pay pour obtenir le statut réel.
+    if paiement.statut == "en_attente" and paiement.fournisseur_paiement_id:
+        try:
+            client = get_client()
+            tx = client.transactions.get(reference=paiement.fournisseur_paiement_id)
+            
+            if tx.succeeded:
+                data_webhook = {
+                    "reference": tx.reference,
+                    "operator": tx.operator,
+                    "phone_number": tx.phone_number,
+                    "amount": tx.amount,
+                    "currency": tx.currency,
+                    "fees": tx.fees,
+                    "net_amount": tx.net_amount,
+                    "status": tx.status_value,
+                }
+                _marquer_paiement_reussi(db, paiement, data_webhook)
+            elif tx.failed:
+                _marquer_paiement_echoue(db, paiement)
+        except Exception:
+            # On ignore discrètement les erreurs réseau/API temporaires pendant la lecture
+            # pour ne pas bloquer l'affichage. Le webhook ou le polling suivant prendra le relais.
+            pass
+
     return paiement
 
 
@@ -63,70 +95,140 @@ def initier_paiement(db: Session, commande_id: UUID, data: PaiementCreate) -> Pa
     if existant:
         return existant
 
+    if data.operator.upper() not in OPERATEURS_AUTORISES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Seuls les paiements Orange Money et MTN Mobile Money sont acceptés"
+        )
+
+    devise_attendue = devise_pour_pays(data.country)
+    if devise_attendue is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Pays non supporté pour le paiement Mobile Money : {data.country}"
+        )
+    if devise_attendue != commande.devise:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Devise incompatible : la commande est en {commande.devise}, "
+                f"mais {data.country} utilise {devise_attendue}"
+            )
+        )
+
     paiement = Paiement(
         commande_id=commande_id,
         montant=float(commande.montant_total),
         devise=commande.devise,
         statut="en_attente",
-        fournisseur=data.fournisseur,
-        fournisseur_paiement_id=data.fournisseur_paiement_id,
-        metadonnees=data.metadonnees,
+        fournisseur="hrskillspay",
     )
     db.add(paiement)
+    db.commit()
+    db.refresh(paiement)
+
+    try:
+        reponse = get_client().cash_in.mobile_money(
+            phone_number=data.phone_number,
+            operator=data.operator.upper(),
+            amount=float(commande.montant_total),
+            currency=commande.devise,
+            country=data.country.upper(),
+            idempotency_key=f"cashin-{paiement.id}",
+            metadata=data.metadonnees if isinstance(data.metadonnees, dict) else None,
+        )
+    except hrpay.ValidationError as e:
+        paiement.statut = "echoue"
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except hrpay.RateLimitError:
+        paiement.statut = "echoue"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Trop de tentatives de paiement, réessayez dans quelques instants"
+        )
+    except (hrpay.NetworkError, hrpay.TimeoutError, hrpay.CircuitBreakerOpenError):
+        paiement.statut = "echoue"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service de paiement momentanément indisponible, réessayez plus tard"
+        )
+    except hrpay.HRPayError as e:
+        paiement.statut = "echoue"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Erreur du fournisseur de paiement : {e}"
+        )
+
+    paiement.fournisseur_paiement_id = reponse.reference
+    paiement.metadonnees = {
+        "operator": reponse.operator,
+        "phone_number": reponse.phone_number,
+        "fee": reponse.fee,
+        "fee_percent": reponse.fee_percent,
+        "net_amount": reponse.net_amount,
+        "statut_fournisseur": reponse.status,
+    }
     db.commit()
     db.refresh(paiement)
     return paiement
 
 
-def confirmer_paiement(
-    db: Session,
-    paiement_id: UUID,
-    utilisateur_id: UUID,
-    data: PaiementConfirmer,
-) -> Paiement:
+def traiter_webhook_paiement(db: Session, corps_brut: bytes, signature: str) -> dict:
+    try:
+        event = hrpay.construct_event(corps_brut, signature, settings.HRPAY_WEBHOOK_SECRET)
+    except hrpay.WebhookSignatureError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    reference = event.data.get("reference")
+    if not reference:
+        return {"status": "ignored", "reason": "no reference in payload"}
+
     paiement = db.execute(
-        select(Paiement).where(Paiement.id == paiement_id)
+        select(Paiement).where(Paiement.fournisseur_paiement_id == reference)
     ).scalar_one_or_none()
-
     if not paiement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Paiement non trouvé"
-        )
+        return {"status": "ignored", "reason": "paiement inconnu"}
 
-    if paiement.statut == "complete":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ce paiement est déjà confirmé"
-        )
+    if event.type_value == "payment.succeeded":
+        _marquer_paiement_reussi(db, paiement, event.data)
+    elif event.type_value == "payment.failed":
+        _marquer_paiement_echoue(db, paiement)
+    elif event.type_value == "payment.hold":
+        # Pas de statut dédié en base (contrainte CHECK limitée à
+        # en_attente/reussi/echoue/rembourse) : on garde "en_attente"
+        # et on trace le hold AML dans les métadonnées pour le support.
+        paiement.metadonnees = {**(paiement.metadonnees or {}), "webhook_data": event.data, "hold": True}
+        db.commit()
+    elif event.type_value == "payment.refunded":
+        _marquer_paiement_rembourse(db, paiement)
+
+    return {"status": "ok"}
+
+
+def _marquer_paiement_reussi(db: Session, paiement: Paiement, data: dict) -> None:
+    if paiement.statut == "reussi":
+        return  # déjà traité (webhook redélivré)
+
+    paiement.statut = "reussi"
+    paiement.paye_le = datetime.now(timezone.utc)
+    paiement.metadonnees = {**(paiement.metadonnees or {}), "webhook_data": data}
 
     commande = db.execute(
         select(Commande).where(Commande.id == paiement.commande_id)
     ).scalar_one_or_none()
+    if not commande:
+        db.commit()
+        return
 
-    if not commande or commande.utilisateur_id != utilisateur_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès refusé"
-        )
-
-    # Mettre à jour le paiement
-    paiement.statut = "complete"
-    paiement.paye_le = datetime.now(timezone.utc)
-    if data.fournisseur_paiement_id:
-        paiement.fournisseur_paiement_id = data.fournisseur_paiement_id
-    if data.metadonnees:
-        paiement.metadonnees = data.metadonnees
-
-    # Mettre à jour la commande
     commande.statut = "payee"
-
-    # Accorder l'accès aux livres
     _accorder_acces_livres(db, commande)
 
-    # Notification
     notifier(
-        db, utilisateur_id,
+        db, commande.utilisateur_id,
         titre="Paiement confirmé !",
         message=(
             "Votre paiement a été confirmé. "
@@ -137,8 +239,23 @@ def confirmer_paiement(
     )
 
     db.commit()
-    db.refresh(paiement)
-    return paiement
+
+
+def _marquer_paiement_echoue(db: Session, paiement: Paiement) -> None:
+    if paiement.statut == "reussi":
+        return  # déjà payé, on ignore un échec tardif/redélivré
+    paiement.statut = "echoue"
+    db.commit()
+
+
+def _marquer_paiement_rembourse(db: Session, paiement: Paiement) -> None:
+    paiement.statut = "rembourse"
+    commande = db.execute(
+        select(Commande).where(Commande.id == paiement.commande_id)
+    ).scalar_one_or_none()
+    if commande:
+        commande.statut = "remboursee"
+    db.commit()
 
 
 def _accorder_acces_livres(db: Session, commande: Commande) -> None:

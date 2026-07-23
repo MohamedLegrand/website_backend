@@ -5,13 +5,9 @@ from datetime import datetime
 
 
 class PaiementCreate(BaseModel):
-    fournisseur: Optional[str] = None
-    fournisseur_paiement_id: Optional[str] = None
-    metadonnees: Optional[Any] = None
-
-
-class PaiementConfirmer(BaseModel):
-    fournisseur_paiement_id: Optional[str] = None
+    operator: str
+    phone_number: str
+    country: str = "CM"
     metadonnees: Optional[Any] = None
 
 

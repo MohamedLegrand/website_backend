@@ -16,7 +16,7 @@ class Paiement(Base):
     fournisseur_paiement_id: Mapped[str | None] = mapped_column(String(255), unique=True)
     statut: Mapped[str] = mapped_column(String(20), default="en_attente")
     montant: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    devise: Mapped[str] = mapped_column(String(10), default="EUR")
+    devise: Mapped[str] = mapped_column(String(10), default="XAF")
     metadonnees: Mapped[dict | None] = mapped_column(JSON)
     paye_le: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True))
     cree_le: Mapped[DateTime] = mapped_column(

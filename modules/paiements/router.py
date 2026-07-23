@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.database.database import get_db
@@ -6,7 +6,6 @@ from app.dependencies.auth import get_current_user, get_current_admin
 from modules.utilisateurs.models import Utilisateur
 from modules.paiements.schemas import (
     PaiementCreate,
-    PaiementConfirmer,
     PaiementResponse,
     PaiementListResponse,
 )
@@ -29,14 +28,16 @@ def initier_paiement(
     return service.initier_paiement(db, commande_id, data)
 
 
-@router.post("/{paiement_id}/confirmer", response_model=PaiementResponse)
-def confirmer_paiement(
-    paiement_id: UUID,
-    data: PaiementConfirmer,
+@router.post("/webhook/hrskillspay", status_code=status.HTTP_200_OK)
+async def webhook_hrskillspay(
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: Utilisateur = Depends(get_current_user),
 ):
-    return service.confirmer_paiement(db, paiement_id, current_user.id, data)
+    """Appelé par HR-Skills Pay (serveur à serveur) — pas d'authentification JWT.
+    La signature HMAC du corps brut fait foi (voir service.traiter_webhook_paiement)."""
+    corps_brut = await request.body()
+    signature = request.headers.get("X-Hub-Signature", "")
+    return service.traiter_webhook_paiement(db, corps_brut, signature)
 
 
 @router.get("/commande/{commande_id}", response_model=PaiementResponse)

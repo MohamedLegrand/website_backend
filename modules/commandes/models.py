@@ -13,7 +13,7 @@ class Commande(Base):
     )
     statut: Mapped[str] = mapped_column(String(20), default="en_attente")
     montant_total: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    devise: Mapped[str] = mapped_column(String(10), default="EUR")
+    devise: Mapped[str] = mapped_column(String(10), default="XAF")
     cree_le: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

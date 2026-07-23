@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     MAIL_SERVER: str = "smtp.gmail.com"
     MAIL_FROM_NAME: str = "Website Backend"
 
+    # HR-Skills Pay (paiements Mobile Money)
+    HRPAY_PUBLIC_KEY: str = ""
+    HRPAY_SECRET_KEY: str = ""
+    HRPAY_WEBHOOK_SECRET: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
