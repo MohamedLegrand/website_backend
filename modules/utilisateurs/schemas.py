@@ -32,6 +32,18 @@ class UtilisateurUpdateAvatar(BaseModel):
 class UtilisateurUpdateRole(BaseModel):
     role: RoleEnum
 
+# Schéma pour les préférences de notifications
+class NotificationsPreferences(BaseModel):
+    email: bool
+    commandes: bool
+    promotions: bool
+    newsletter: bool
+
+# Schéma pour changer les préférences
+class UtilisateurPreferencesUpdate(BaseModel):
+    langue: str
+    notifications: NotificationsPreferences
+
 # Schéma de réponse (ce qu'on renvoie au client)
 class UtilisateurResponse(UtilisateurBase):
     id: UUID
@@ -40,6 +52,11 @@ class UtilisateurResponse(UtilisateurBase):
     est_actif: bool
     cree_le: datetime
     modifie_le: datetime
+    langue: str
+    notif_email: bool
+    notif_commandes: bool
+    notif_promotions: bool
+    notif_newsletter: bool
 
     class Config:
         from_attributes = True

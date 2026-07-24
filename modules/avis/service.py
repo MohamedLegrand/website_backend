@@ -5,12 +5,14 @@ from fastapi import HTTPException, status
 from modules.avis.models import Avis
 from modules.avis.schemas import AvisCreate, AvisUpdate
 from modules.livres import service as livres_service
+from modules.utilisateurs.models import Utilisateur, RoleEnum
+from modules.acces_livres.service import verifier_acces
 
-def creer_avis(db: Session, utilisateur_id: UUID, data: AvisCreate) -> Avis:
+def creer_avis(db: Session, utilisateur: Utilisateur, data: AvisCreate) -> Avis:
     livre = livres_service.obtenir_livre(db, data.livre_id)
 
     existant = db.execute(
-        select(Avis).where(Avis.utilisateur_id == utilisateur_id, Avis.livre_id == livre.id)
+        select(Avis).where(Avis.utilisateur_id == utilisateur.id, Avis.livre_id == livre.id)
     ).scalar_one_or_none()
 
     if existant:
@@ -19,8 +21,17 @@ def creer_avis(db: Session, utilisateur_id: UUID, data: AvisCreate) -> Avis:
             detail="Vous avez déjà laissé un avis pour ce livre"
         )
 
+    # Vérifier l'accès au livre (admin, gratuit ou acheté)
+    est_admin = utilisateur.role == RoleEnum.admin
+    a_acces = livre.est_gratuit or est_admin or verifier_acces(db, utilisateur.id, livre.id)
+    if not a_acces:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vous devez acheter ce livre pour pouvoir laisser un avis"
+        )
+
     avis = Avis(
-        utilisateur_id=utilisateur_id,
+        utilisateur_id=utilisateur.id,
         livre_id=livre.id,
         note=data.note,
         commentaire=data.commentaire

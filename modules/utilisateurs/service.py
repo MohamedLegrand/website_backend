@@ -7,7 +7,8 @@ from modules.utilisateurs.schemas import (
     UtilisateurCreate,
     UtilisateurUpdate,
     UtilisateurUpdateMotDePasse,
-    UtilisateurUpdateRole
+    UtilisateurUpdateRole,
+    UtilisateurPreferencesUpdate
 )
 from passlib.context import CryptContext
 
@@ -136,3 +137,15 @@ def supprimer_utilisateur(db: Session, utilisateur_id: UUID) -> dict:
     db.delete(utilisateur)
     db.commit()
     return {"message": "Compte supprimé avec succès"}
+
+# Modifier les préférences de l'utilisateur
+def modifier_preferences(db: Session, utilisateur_id: UUID, data: UtilisateurPreferencesUpdate) -> Utilisateur:
+    utilisateur = obtenir_utilisateur(db, utilisateur_id)
+    utilisateur.langue = data.langue
+    utilisateur.notif_email = data.notifications.email
+    utilisateur.notif_commandes = data.notifications.commandes
+    utilisateur.notif_promotions = data.notifications.promotions
+    utilisateur.notif_newsletter = data.notifications.newsletter
+    db.commit()
+    db.refresh(utilisateur)
+    return utilisateur

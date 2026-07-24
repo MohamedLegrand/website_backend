@@ -6,6 +6,7 @@ from modules.commandes.models import Commande, LigneCommande
 from modules.livres import service as livres_service
 from modules.commandes.schemas import CommandeCreate, CommandeUpdateStatut
 from modules.notifications.notifier import notifier
+from modules.notifications.emails import envoyer_confirmation_commande, envoyer_recu_paiement
 
 STATUTS_VALIDES = ["en_attente", "payee", "annulee", "remboursee"]
 
@@ -55,6 +56,7 @@ def creer_commande(db: Session, utilisateur_id: UUID, data: CommandeCreate) -> C
     )
     db.commit()
     db.refresh(commande)
+    envoyer_confirmation_commande(commande)
     return commande
 
 
@@ -89,19 +91,20 @@ def creer_commande_depuis_panier(db: Session, utilisateur_id: UUID, panier) -> C
         utilisateur_id=utilisateur_id,
         statut="en_attente",
         montant_total=montant_total,
-        devise="EUR",
+        devise="XAF",
         lignes=lignes
     )
     db.add(commande)
     notifier(
         db, utilisateur_id,
         titre="Commande passée avec succès",
-        message=f"Votre commande a été enregistrée. Total : {montant_total:.2f} EUR.",
+        message=f"Votre commande a été enregistrée. Total : {montant_total:,.0f} XAF.".replace(",", " "),
         type_notif="commande",
         lien=f"/commandes/{commande.id}",
     )
     db.commit()
     db.refresh(commande)
+    envoyer_confirmation_commande(commande)
     return commande
 
 
@@ -226,6 +229,10 @@ def changer_statut_commande(
             type_notif="paiement",
             lien="/bibliotheque",
         )
+        db.commit()
+        db.refresh(commande)
+        envoyer_recu_paiement(commande)
+        return commande
     elif data.statut == "annulee" and ancien_statut != "annulee":
         notifier(
             db, commande.utilisateur_id,

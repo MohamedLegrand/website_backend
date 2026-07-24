@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, UploadFile, File, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.database.database import get_db
@@ -23,9 +23,10 @@ router = APIRouter(
 def liste_livres(
     page: int = 1,
     taille: int = 10,
+    recherche: str | None = None,
     db: Session = Depends(get_db)
 ):
-    return service.obtenir_livres(db, page, taille)
+    return service.obtenir_livres(db, page, taille, recherche)
 
 @router.get("/collection/{collection_id}", response_model=LivreListResponse)
 def livres_par_collection(
@@ -35,6 +36,22 @@ def livres_par_collection(
     db: Session = Depends(get_db)
 ):
     return service.obtenir_livres_par_collection(db, collection_id, page, taille)
+
+# ─── Admin ────────────────────────────────────────────────────
+# Déclarée avant /{id} pour que "admin" ne soit pas interprété comme un identifiant de livre.
+
+@router.get("/admin", response_model=LivreListResponse)
+def liste_livres_admin(
+    page: int = 1,
+    taille: int = 10,
+    recherche: str | None = None,
+    db: Session = Depends(get_db),
+    _: Utilisateur = Depends(get_current_admin)
+):
+    """Catalogue complet (publiés + brouillons), réservé à l'administration."""
+    return service.obtenir_livres_admin(db, page, taille, recherche)
+
+# ─── Public ───────────────────────────────────────────────────
 
 @router.get("/{id}", response_model=LivreResponse)
 def obtenir_livre(
@@ -90,3 +107,14 @@ def supprimer_livre(
 ):
     livre = service.obtenir_livre(db, id)
     return service.supprimer_livre(db, livre.id, current_admin.id)
+
+@router.post("/{id}/couverture", response_model=LivreResponse)
+async def televerser_couverture(
+    id: str,
+    request: Request,
+    fichier: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: Utilisateur = Depends(get_current_admin)
+):
+    livre = service.obtenir_livre(db, id)
+    return await service.televerser_couverture(db, livre.id, fichier, str(request.base_url))

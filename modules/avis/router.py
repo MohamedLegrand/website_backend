@@ -15,7 +15,7 @@ def creer_avis(
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user)
 ):
-    return service.creer_avis(db, current_user.id, data)
+    return service.creer_avis(db, current_user, data)
 
 @router.get("/livre/{livre_id}", response_model=AvisListResponse)
 def avis_livre(

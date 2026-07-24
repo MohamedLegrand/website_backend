@@ -9,6 +9,7 @@ from modules.livres import service as livres_service
 from modules.acces_livres.models import AccesLivre
 from modules.historique_telechargements import service as historique_service
 from modules.utilisateurs.models import Utilisateur, RoleEnum
+from modules.fichiers_livres.watermark import watermarker_pdf
 from app.core.config import settings
 import os
 import uuid
@@ -114,15 +115,22 @@ def obtenir_fichier(db: Session, fichier_id: UUID) -> FichierLivre:
         )
     return fichier
 
-# Télécharger un fichier (livre acheté, gratuit, ou admin) — journalise le téléchargement
+# Lire ou télécharger un fichier (livre acheté, gratuit, ou admin)
+#
+# mode="lecture" : utilisé par le lecteur en ligne, illimité, jamais filigrané
+#   (pas comptabilisé comme un téléchargement).
+# mode="telechargement" : sauvegarde explicite sur l'appareil de l'utilisateur,
+#   soumise au quota LIMITE_TELECHARGEMENTS_PAR_LIVRE et filigranée (PDF) avec
+#   l'email de l'acheteur pour dissuader/tracer la redistribution.
 def telecharger_fichier(
     db: Session,
     id_ou_slug,
     fichier_id: UUID,
     utilisateur: Utilisateur,
+    mode: str = "telechargement",
     adresse_ip: str = None,
     appareil: str = None,
-) -> tuple[Livre, FichierLivre]:
+) -> tuple[Livre, FichierLivre, bytes]:
     livre = livres_service.obtenir_livre(db, id_ou_slug)
 
     fichier = obtenir_fichier(db, fichier_id)
@@ -132,7 +140,8 @@ def telecharger_fichier(
             detail="Fichier non trouvé pour ce livre"
         )
 
-    a_acces = livre.est_gratuit or utilisateur.role == RoleEnum.admin
+    est_admin = utilisateur.role == RoleEnum.admin
+    a_acces = livre.est_gratuit or est_admin
     if not a_acces:
         acces = db.execute(
             select(AccesLivre).where(
@@ -150,12 +159,37 @@ def telecharger_fichier(
             detail="Vous n'avez pas accès à ce livre. Achetez-le pour pouvoir le télécharger."
         )
 
-    historique_service.enregistrer_telechargement(
-        db, utilisateur.id, livre.id, fichier.id, fichier.format,
-        adresse_ip=adresse_ip, appareil=appareil
-    )
+    contenu_filigrane = None
 
-    return livre, fichier
+    if mode == "telechargement":
+        if not livre.est_gratuit and not est_admin:
+            deja_telecharges = historique_service.compter_telechargements(
+                db, utilisateur.id, fichier.id
+            )
+            if deja_telecharges >= settings.LIMITE_TELECHARGEMENTS_PAR_LIVRE:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=(
+                        f"Limite de {settings.LIMITE_TELECHARGEMENTS_PAR_LIVRE} "
+                        "téléchargements atteinte pour ce livre. La lecture en ligne "
+                        "reste disponible sans limite."
+                    )
+                )
+
+        historique_service.enregistrer_telechargement(
+            db, utilisateur.id, livre.id, fichier.id, fichier.format,
+            adresse_ip=adresse_ip, appareil=appareil
+        )
+
+        if fichier.format == "pdf":
+            try:
+                contenu_filigrane = watermarker_pdf(fichier.chemin_fichier, utilisateur.email)
+            except Exception:
+                # Dégradation silencieuse : on préfère livrer le fichier non
+                # filigrané à un acheteur légitime plutôt que bloquer l'achat.
+                contenu_filigrane = None
+
+    return livre, fichier, contenu_filigrane
 
 # Supprimer un fichier
 def supprimer_fichier(db: Session, fichier_id: UUID) -> dict:

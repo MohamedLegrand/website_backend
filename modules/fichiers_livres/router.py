@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, Request, UploadFile, File, status
+from fastapi import APIRouter, Depends, Request, UploadFile, File, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from typing import Literal
 from uuid import UUID
 from app.database.database import get_db
 from app.dependencies.auth import get_current_admin, get_current_user
@@ -58,28 +59,42 @@ MEDIA_TYPES = {
     "epub": "application/epub+zip",
 }
 
-@router.get(
-    "/{livre_id}/telecharger/{fichier_id}",
-    response_class=FileResponse
-)
+@router.get("/{livre_id}/telecharger/{fichier_id}")
 def telecharger_fichier(
     livre_id: str,
     fichier_id: UUID,
     request: Request,
+    mode: Literal["lecture", "telechargement"] = "telechargement",
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user)
 ):
     """
     livre_id accepte soit l'UUID en base, soit le slug.
     Nécessite un accès valide (livre gratuit, acheté, ou compte admin).
+
+    mode="lecture" (lecteur en ligne) : illimité, fichier non filigrané.
+    mode="telechargement" (par défaut) : soumis au quota de téléchargements
+    et filigrané (PDF) avec l'email de l'acheteur.
     """
-    livre, fichier = service.telecharger_fichier(
-        db, livre_id, fichier_id, current_user,
+    livre, fichier, contenu_filigrane = service.telecharger_fichier(
+        db, livre_id, fichier_id, current_user, mode=mode,
         adresse_ip=request.client.host if request.client else None,
         appareil=request.headers.get("user-agent"),
     )
+
+    nom_fichier = f"{livre.slug}.{fichier.format}"
+    media_type = MEDIA_TYPES.get(fichier.format, "application/octet-stream")
+
+    if contenu_filigrane is not None:
+        disposition = "attachment" if mode == "telechargement" else "inline"
+        return Response(
+            content=contenu_filigrane,
+            media_type=media_type,
+            headers={"Content-Disposition": f'{disposition}; filename="{nom_fichier}"'}
+        )
+
     return FileResponse(
         path=fichier.chemin_fichier,
-        filename=f"{livre.slug}.{fichier.format}",
-        media_type=MEDIA_TYPES.get(fichier.format, "application/octet-stream")
+        filename=nom_fichier,
+        media_type=media_type
     )

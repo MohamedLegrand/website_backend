@@ -11,7 +11,8 @@ from modules.utilisateurs.schemas import (
     UtilisateurUpdateAvatar,
     UtilisateurUpdateRole,
     UtilisateurResponse,
-    UtilisateurListResponse
+    UtilisateurListResponse,
+    UtilisateurPreferencesUpdate
 )
 from modules.utilisateurs import service
 
@@ -58,6 +59,14 @@ def supprimer_mon_compte(
     db: Session = Depends(get_db)
 ):
     return service.supprimer_utilisateur(db, current_user.id)
+
+@router.put("/me/preferences", response_model=UtilisateurResponse)
+def modifier_mes_preferences(
+    data: UtilisateurPreferencesUpdate,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return service.modifier_preferences(db, current_user.id, data)
 
 # ─── Administration ───────────────────────────────────────────
 

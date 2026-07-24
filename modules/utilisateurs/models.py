@@ -42,3 +42,8 @@ class Utilisateur(Base):
         server_default=func.now(),
         onupdate=func.now()
     )
+    langue: Mapped[str] = mapped_column(String(10), default="fr", server_default="'fr'")
+    notif_email: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    notif_commandes: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    notif_promotions: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    notif_newsletter: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")

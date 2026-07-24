@@ -10,11 +10,33 @@ from modules.commandes.models import Commande
 from modules.paiements.schemas import PaiementCreate
 from modules.paiements.hrpay_client import get_client, devise_pour_pays
 from modules.notifications.notifier import notifier
+from modules.notifications.emails import envoyer_recu_paiement
+from modules.utilisateurs.models import Utilisateur, RoleEnum
 
 OPERATEURS_AUTORISES = {"ORANGE", "MTN"}
 
 
-def obtenir_paiement_par_commande(db: Session, commande_id: UUID) -> Paiement:
+def _verifier_proprietaire_commande(db: Session, commande_id: UUID, utilisateur: Utilisateur) -> Commande:
+    commande = db.execute(
+        select(Commande).where(Commande.id == commande_id)
+    ).scalar_one_or_none()
+
+    if not commande:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Commande non trouvée"
+        )
+
+    if commande.utilisateur_id != utilisateur.id and utilisateur.role != RoleEnum.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vous n'avez pas accès à cette commande"
+        )
+
+    return commande
+
+
+def obtenir_paiement_par_commande(db: Session, commande_id: UUID, utilisateur: Utilisateur) -> Paiement:
     paiement = db.execute(
         select(Paiement).where(Paiement.commande_id == commande_id)
     ).scalar_one_or_none()
@@ -24,6 +46,8 @@ def obtenir_paiement_par_commande(db: Session, commande_id: UUID) -> Paiement:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Paiement non trouvé pour cette commande"
         )
+
+    _verifier_proprietaire_commande(db, commande_id, utilisateur)
 
     # Synchronisation active en cas de polling : si le statut local est "en_attente",
     # on interroge l'API HR-Skills Pay pour obtenir le statut réel.
@@ -69,16 +93,8 @@ def obtenir_tous_paiements(db: Session, page: int = 1, taille: int = 10) -> dict
     }
 
 
-def initier_paiement(db: Session, commande_id: UUID, data: PaiementCreate) -> Paiement:
-    commande = db.execute(
-        select(Commande).where(Commande.id == commande_id)
-    ).scalar_one_or_none()
-
-    if not commande:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Commande non trouvée"
-        )
+def initier_paiement(db: Session, commande_id: UUID, data: PaiementCreate, utilisateur: Utilisateur) -> Paiement:
+    commande = _verifier_proprietaire_commande(db, commande_id, utilisateur)
 
     if commande.statut not in ("en_attente",):
         raise HTTPException(
@@ -239,6 +255,8 @@ def _marquer_paiement_reussi(db: Session, paiement: Paiement, data: dict) -> Non
     )
 
     db.commit()
+    db.refresh(commande)
+    envoyer_recu_paiement(commande)
 
 
 def _marquer_paiement_echoue(db: Session, paiement: Paiement) -> None:

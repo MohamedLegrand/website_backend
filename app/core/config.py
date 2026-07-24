@@ -16,9 +16,17 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
 
-    # Upload fichiers
+    # Upload fichiers (livres PDF/EPUB) — accès protégé, jamais servi en statique
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE_MB: int = 50
+
+    # Upload fichiers publics (images de couverture) — dossier distinct de UPLOAD_DIR,
+    # servi en statique sans authentification. Ne jamais y stocker de fichiers de livres.
+    PUBLIC_UPLOAD_DIR: str = "uploads_public"
+    MAX_IMAGE_SIZE_MB: int = 5
+
+    # Téléchargements de livres achetés
+    LIMITE_TELECHARGEMENTS_PAR_LIVRE: int = 5
 
     # Facturation (en-tête / pied de page du PDF de facture)
     FACTURE_ENTREPRISE_NOM: str = "Sagesse Africaine"

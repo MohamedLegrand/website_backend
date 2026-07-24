@@ -3,6 +3,14 @@ from sqlalchemy import select, func
 from uuid import UUID
 from modules.historique_telechargements.models import HistoriqueTelechargement
 
+def compter_telechargements(db: Session, utilisateur_id: UUID, fichier_livre_id: UUID) -> int:
+    return db.execute(
+        select(func.count(HistoriqueTelechargement.id)).where(
+            HistoriqueTelechargement.utilisateur_id == utilisateur_id,
+            HistoriqueTelechargement.fichier_livre_id == fichier_livre_id,
+        )
+    ).scalar()
+
 def enregistrer_telechargement(
     db: Session,
     utilisateur_id: UUID,

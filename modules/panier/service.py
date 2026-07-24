@@ -5,6 +5,8 @@ from modules.panier.models import Panier, LignePanier
 from modules.livres.models import Livre
 from modules.livres import service as livres_service
 from modules.panier.schemas import AjouterLivreSchema, PanierResponse, LignePanierResponse
+from fastapi import HTTPException, status
+from modules.acces_livres.service import verifier_acces
 
 
 def obtenir_ou_creer_panier(db: Session, utilisateur_id: UUID) -> Panier:
@@ -25,6 +27,20 @@ def ajouter_livre(db: Session, utilisateur_id: UUID, data: AjouterLivreSchema):
     # Vérifier si le livre existe (livre_id accepte un UUID ou un slug)
     livre = livres_service.obtenir_livre(db, data.livre_id)
 
+    # Vérifier si le livre est gratuit
+    if livre.est_gratuit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Les livres gratuits ne peuvent pas être ajoutés au panier. Vous pouvez y accéder directement."
+        )
+
+    # Vérifier si l'utilisateur possède déjà le livre
+    if verifier_acces(db, utilisateur_id, livre.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vous possédez déjà ce livre"
+        )
+
     # Vérifier si le livre est déjà dans le panier
     ligne = db.query(LignePanier).filter(
         LignePanier.panier_id == panier.id,
@@ -32,12 +48,12 @@ def ajouter_livre(db: Session, utilisateur_id: UUID, data: AjouterLivreSchema):
     ).first()
 
     if ligne:
-        ligne.quantite += data.quantite
+        ligne.quantite = 1
     else:
         ligne = LignePanier(
             panier_id=panier.id,
             livre_id=livre.id,
-            quantite=data.quantite
+            quantite=1
         )
         db.add(ligne)
 

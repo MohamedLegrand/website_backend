@@ -1,13 +1,16 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from uuid import UUID
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from datetime import datetime
 from modules.livres.models import Livre
 from modules.collections.models import Collection
 from modules.livres.schemas import LivreCreate, LivreUpdate
 from modules.notifications.notifier import notifier
+from app.core.config import settings
 import re
+import os
+import uuid as uuid_lib
 
 def generer_slug(titre: str) -> str:
     slug = titre.lower()
@@ -101,12 +104,35 @@ def creer_livre(db: Session, data: LivreCreate, admin_id: UUID) -> Livre:
     db.refresh(livre)
     return livre
 
-# Obtenir tous les livres
-def obtenir_livres(db: Session, page: int = 1, taille: int = 10) -> dict:
+# Obtenir les livres publiés (catalogue public, recherche) — les brouillons sont exclus
+def obtenir_livres(db: Session, page: int = 1, taille: int = 10, recherche: str = None) -> dict:
+    return _lister_livres(db, page, taille, recherche, seulement_publies=True)
+
+# Obtenir tous les livres, publiés ou non (réservé à l'admin, pour la gestion du catalogue)
+def obtenir_livres_admin(db: Session, page: int = 1, taille: int = 10, recherche: str = None) -> dict:
+    return _lister_livres(db, page, taille, recherche, seulement_publies=False)
+
+def _lister_livres(
+    db: Session, page: int, taille: int, recherche: str, seulement_publies: bool
+) -> dict:
     offset = (page - 1) * taille
-    total = db.execute(select(func.count(Livre.id))).scalar()
+
+    conditions = []
+    if seulement_publies:
+        conditions.append(Livre.est_publie.is_(True))
+    if recherche and recherche.strip():
+        motif = f"%{recherche.strip()}%"
+        conditions.append(or_(Livre.titre.ilike(motif), Livre.auteur.ilike(motif)))
+
+    requete_total = select(func.count(Livre.id))
+    requete_livres = select(Livre)
+    for condition in conditions:
+        requete_total = requete_total.where(condition)
+        requete_livres = requete_livres.where(condition)
+
+    total = db.execute(requete_total).scalar()
     livres = db.execute(
-        select(Livre).offset(offset).limit(taille)
+        requete_livres.offset(offset).limit(taille)
     ).scalars().all()
 
     return {
@@ -250,3 +276,41 @@ def supprimer_livre(db: Session, livre_id: UUID, admin_id: UUID) -> dict:
     )
     db.commit()
     return {"message": "Livre supprimé avec succès"}
+
+FORMATS_IMAGE_AUTORISES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}
+
+# Téléverser l'image de couverture d'un livre (stockage public, distinct des fichiers de livre)
+async def televerser_couverture(
+    db: Session, livre_id: UUID, fichier: UploadFile, base_url: str
+) -> Livre:
+    livre = obtenir_livre(db, livre_id)
+
+    extension = (fichier.filename or "").split(".")[-1].lower()
+    if extension not in FORMATS_IMAGE_AUTORISES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Format non autorisé. Formats acceptés : PNG, JPG, JPEG"
+        )
+
+    contenu = await fichier.read()
+    taille_max = settings.MAX_IMAGE_SIZE_MB * 1024 * 1024
+    if len(contenu) > taille_max:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Image trop volumineuse. Taille maximale : {settings.MAX_IMAGE_SIZE_MB} MB"
+        )
+
+    dossier = os.path.join(settings.PUBLIC_UPLOAD_DIR, "couvertures", str(livre.id))
+    os.makedirs(dossier, exist_ok=True)
+    nom_fichier = f"{uuid_lib.uuid4()}.{extension}"
+    chemin_disque = os.path.join(dossier, nom_fichier)
+
+    with open(chemin_disque, "wb") as f:
+        f.write(contenu)
+
+    chemin_public = f"/uploads-public/couvertures/{livre.id}/{nom_fichier}"
+    livre.couverture_url = base_url.rstrip("/") + chemin_public
+
+    db.commit()
+    db.refresh(livre)
+    return livre

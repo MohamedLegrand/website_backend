@@ -15,6 +15,17 @@ AUTEUR = "SIDA ABENA Jean Paul Sylvain"
 PRIX = 6500
 LANGUE = "Français"
 
+# Dossiers dont le sommaire est réparti sur 2 images (sommaire1.png, sommaire2.png)
+# au lieu d'une seule image sommaire.png. Doit rester synchronisé avec la liste
+# DOSSIERS_SOMMAIRE_DOUBLE du frontend (src/data/livresSite.js).
+SLUGS_SOMMAIRE_DOUBLE = {
+    "comment-comprendre-et-interpreter-le-reve",
+    "comment-obtenir-ta-delivrance-et-ta-victoire-sur-le-diable-les-demons-et-les-sorciers",
+    "les-consequences-spirituelles-de-la-masturbation-et-de-la-pornographie-dans-ta-vie",
+    "l-hygiene-de-l-ame",
+    "enjeux-et-defis-du-controle-spirituel-de-l-homme",
+}
+
 COLLECTION_ID = uuid.UUID("1ad43801-da87-4df5-b1e0-5a08e614160d")
 COLLECTION_NOM = "LUMIÈRE ET VÉRITÉ SUR LE MONDE DES TÉNÈBRES"
 COLLECTION_DESCRIPTION = "Collection pour la promotion de la Médecine Traditionnelle des Handicapés Spirituels (MTHS)"
@@ -155,6 +166,11 @@ assert len(LIVRES) == 21, f"Attendu 21 livres, trouvé {len(LIVRES)}"
 assert len({l['slug'] for l in LIVRES}) == 21, "Slugs dupliqués détectés"
 
 
+def image_soeur(couverture_url: str, fichier: str) -> str:
+    """Construit l'URL d'une image du même dossier que la couverture (ex: sommaire.png)."""
+    return f"{couverture_url.rsplit('/', 1)[0]}/{fichier}"
+
+
 def run():
     db = SessionLocal()
     try:
@@ -191,12 +207,22 @@ def run():
 
         # 3) Insérer les 21 nouveaux livres
         for data in LIVRES:
+            if data["slug"] in SLUGS_SOMMAIRE_DOUBLE:
+                sommaire_urls = [
+                    image_soeur(data["couverture_url"], "sommaire1.png"),
+                    image_soeur(data["couverture_url"], "sommaire2.png"),
+                ]
+            else:
+                sommaire_urls = [image_soeur(data["couverture_url"], "sommaire.png")]
+
             livre = Livre(
                 titre=data["titre"],
                 slug=data["slug"],
                 auteur=AUTEUR,
                 description=data["description"],
                 couverture_url=data["couverture_url"],
+                quatrieme_couverture_url=image_soeur(data["couverture_url"], "quatrieme_couverture.png"),
+                sommaire_urls=sommaire_urls,
                 langue=LANGUE,
                 prix=PRIX,
                 est_gratuit=False,

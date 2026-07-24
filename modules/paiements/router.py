@@ -25,7 +25,7 @@ def initier_paiement(
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user),
 ):
-    return service.initier_paiement(db, commande_id, data)
+    return service.initier_paiement(db, commande_id, data, current_user)
 
 
 @router.post("/webhook/hrskillspay", status_code=status.HTTP_200_OK)
@@ -46,7 +46,7 @@ def paiement_par_commande(
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user),
 ):
-    return service.obtenir_paiement_par_commande(db, commande_id)
+    return service.obtenir_paiement_par_commande(db, commande_id, current_user)
 
 
 @router.get("/", response_model=PaiementListResponse)

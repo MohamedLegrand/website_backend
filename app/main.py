@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.database.database import engine
 from modules.auth.router import router as auth_router
@@ -50,6 +51,17 @@ app.add_middleware(
 # ============================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ==================== FICHIERS PUBLICS (images de couverture) ====================
+# Dossier distinct de UPLOAD_DIR (fichiers de livres, protégés) : ne jamais monter
+# UPLOAD_DIR ici, ça exposerait les PDF/EPUB achetés sans authentification.
+os.makedirs(settings.PUBLIC_UPLOAD_DIR, exist_ok=True)
+app.mount(
+    "/uploads-public",
+    StaticFiles(directory=settings.PUBLIC_UPLOAD_DIR),
+    name="uploads-public"
+)
+# ====================================================================================
 
 # Inclusion des routers
 app.include_router(auth_router, prefix="/api/v1")
